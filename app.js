@@ -30,14 +30,14 @@ function notifySlackUser(email, message) {
   if (!notifyUser) {
     return;
   }
-  if (email.indexOf('bondarenko') === -1) {
-    return;
-  }
   bot.postMessageToUser(notifyUser.name, message, {
     as_user: false,
     icon_url: 'http://www.topnews.ru/upload/img/f66c6758c3.jpg',
   })
-    .then(() => console.log(`${email} notified`));
+    .then(() => console.log(`${email} notified`))
+    .catch((err) => {
+      console.log(`ERR notifySlackUser: ${err}`);
+    });
 }
 
 function monitorBuild(name, id) {
@@ -62,6 +62,9 @@ function monitorBuild(name, id) {
         console.log(`${userId}: ${message}`);
         notifySlackUser(userId, message);
       }
+    })
+    .catch((err) => {
+      console.log(`monitorBuild ERR: ${err}`);
     });
 }
 
@@ -81,6 +84,9 @@ function jobCheck(job) {
       setImmediate(() => {
         jobCheck(job);
       });
+    })
+    .catch((err) => {
+      console.log(`jobCheck ERR: ${err}`);
     });
 }
 
@@ -89,12 +95,13 @@ jenkins.job.list()
     const jobNames = data.map(item => item.name).filter(item => item.indexOf('_OLD') === -1);
     console.log('Monitoring jobs:', jobNames.join(', '));
     return Promise.all(jobNames.map(name => jenkins.job.get(name)));
-  }).then((jobsData) => {
-
-  const currentJobs = jobsData.map((jobData) => {
-    return {name: jobData.name, last: jobData.lastBuild.number, description: jobData.description};
+  })
+  .then((jobsData) => {
+    const currentJobs = jobsData.map((jobData) => {
+      return {name: jobData.name, last: jobData.lastBuild.number, description: jobData.description};
+    });
+    currentJobs.forEach(job => jobCheck(job));
+  })
+  .catch((err) => {
+    console.log(`job.list ERR: ${err}`);
   });
-  currentJobs.forEach(job => jobCheck(job));
-}).catch((err) => {
-  console.log(`ERR: ${err}`);
-});
