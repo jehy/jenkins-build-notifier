@@ -1,0 +1,6 @@
+language: node_js
+node_js:
+  - "6"
+  - "7"
+before_install:
+ - cp config/default.dist.json config/default.json

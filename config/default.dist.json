@@ -1,0 +1,11 @@
+{
+  "jenkins": {
+    "baseUrl": "https://user@domain:token@host",
+    "crumbIssuer": true,
+    "promisify": true
+  },
+  "slack": {
+    "token": "secret",
+    "name": "Vasya"
+  }
+}
