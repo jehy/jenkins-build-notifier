@@ -64,6 +64,13 @@ function monitorBuild(name, id) {
       }
     })
     .catch((err) => {
+      if (err.code === 'ETIMEDOUT') {
+        setImmediate(() => {
+          monitorBuild(name, id);
+        });
+        console.log(`monitorBuild WARN: ${err}`);
+        return;
+      }
       console.log(`monitorBuild ERR: ${err}`);
     });
 }
@@ -86,6 +93,13 @@ function jobCheck(job) {
       });
     })
     .catch((err) => {
+      if (err.code === 'ETIMEDOUT') {
+        setImmediate(() => {
+          jobCheck(job);
+        });
+        console.log(`jobCheck WARN: ${err}`);
+        return;
+      }
       console.log(`jobCheck ERR: ${err}`);
     });
 }
