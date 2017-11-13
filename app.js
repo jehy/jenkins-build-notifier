@@ -14,7 +14,7 @@ log.level(config.logger.level);
 let slackUsers = [];
 let monitoringBuilds = 0;
 
-bot.on('start', () => {
+function updateUsersBase() {
   slackUsers = bot.getUsers()._value.members
     .filter((user) => {
       return user.profile.email !== undefined;
@@ -22,7 +22,12 @@ bot.on('start', () => {
     .map((user) => {
       return {name: user.name, email: user.profile.email};
     });
-  // console.log.info(JSON.stringify(users, null, 3));
+  log.debug(`Users data updated: ${slackUsers.length} users`);
+  setTimeout(updateUsersBase, 1000 * 60 * 60);
+}
+
+bot.on('start', () => {
+  updateUsersBase();
 });
 
 function randomInt(low, high) {
@@ -153,11 +158,8 @@ function jobCheck(job) {
 }
 
 function logMonitoring() {
-  Promise.delay(10000)
-    .then(() => {
-      log.debug(`Monitoring builds: ${monitoringBuilds}`);
-      setImmediate(logMonitoring);
-    });
+  log.debug(`Monitoring builds: ${monitoringBuilds}`);
+  setTimeout(logMonitoring, 10000);
 }
 
 jenkins.job.list()
