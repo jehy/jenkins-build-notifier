@@ -4,9 +4,14 @@ const Jenkins = require('jenkins'),
   config = require('./config/default.json'),
   jenkins = Jenkins(config.jenkins),
   SlackBot = require('slackbots'),
+  moment = require('moment'),
   bot = new SlackBot({token: config.slack.token, name: config.slack.name});
 
 let slackUsers = [];
+
+function log(data) {
+  console.log(`${moment().format('MM-DD HH:mm:ss')}: ${data}`);
+}
 
 bot.on('start', () => {
   slackUsers = bot.getUsers()._value.members
@@ -23,20 +28,53 @@ function randomInt(low, high) {
   return Math.floor(Math.random() * (high - low) + low);
 }
 
-function notifySlackUser(email, message) {
+function notifySlackUser(email, message, result) {
   const notifyUser = slackUsers.find((user) => {
     return user.email === email;
   });
   if (!notifyUser) {
     return;
   }
-  bot.postMessageToUser(notifyUser.name, message, {
+  let color = '#439FE0';
+  if (result === 'SUCCESS') {
+    color = 'good';
+  }
+  else if (result === 'FAILURE') {
+    color = 'danger';
+  }
+  const richMessage = {
+    attachments: [
+      {
+        fallback: message,
+        color,
+        /* pretext: 'Optional text that appears above the attachment block',
+         author_name: 'Bobby Tables',
+         author_link: 'http://flickr.com/bobby/',
+         author_icon: 'http://flickr.com/icons/bobby.jpg',
+         title: 'Slack API Documentation',
+         title_link: 'https://api.slack.com/', */
+        text: message,
+        /* fields: [
+          {
+            title: 'Priority',
+            value: 'High',
+            short: false,
+          },
+        ],
+        image_url: 'http://my-website.com/path/to/image.jpg',
+        thumb_url: 'http://example.com/path/to/thumb.png',
+        footer: 'Slack API',
+        footer_icon: 'https://platform.slack-edge.com/img/default_application_icon.png',
+        ts: 123456789, */
+      },
+    ],
     as_user: false,
     icon_url: 'http://www.topnews.ru/upload/img/f66c6758c3.jpg',
-  })
-    .then(() => console.log(`${email} notified`))
+  };
+  bot.postMessageToUser(notifyUser.name, '', richMessage)
+    .then(() => log(`${email} notified`))
     .catch((err) => {
-      console.log(`ERR notifySlackUser: ${err}`);
+      log(`ERR notifySlackUser: ${err}`);
     });
 }
 
@@ -58,9 +96,16 @@ function monitorBuild(name, id) {
       });
       if (userId) {
         userId = userId.causes[0].userId;
-        const message = `Build result for ${name} ${id} is ${build.result}: ${build.url}console`;
-        console.log(`${userId}: ${message}`);
-        notifySlackUser(userId, message);
+        let message = `Build result for ${name} ${id}`;
+        if (build.timestamp) {
+          message += ` started on ${moment(build.timestamp).format('MM-DD HH:mm:ss')}`;
+        }
+        if (build.displayName) {
+          message += ` for ${build.displayName}`;
+        }
+        message += ` is ${build.result}: ${build.url}console\nDuration: ${build.duration / 1000} sec`;
+        log(`${userId}: ${message}`);
+        notifySlackUser(userId, message, build.result);
       }
     })
     .catch((err) => {
@@ -68,10 +113,10 @@ function monitorBuild(name, id) {
         setImmediate(() => {
           monitorBuild(name, id);
         });
-        console.log(`monitorBuild WARN: ${err}`);
+        log(`monitorBuild WARN: ${err}`);
         return;
       }
-      console.log(`monitorBuild ERR: ${err}`);
+      log(`monitorBuild ERR: ${err}`);
     });
 }
 
@@ -97,17 +142,17 @@ function jobCheck(job) {
         setImmediate(() => {
           jobCheck(job);
         });
-        console.log(`jobCheck WARN: ${err}`);
+        log(`jobCheck WARN: ${err}`);
         return;
       }
-      console.log(`jobCheck ERR: ${err}`);
+      log(`jobCheck ERR: ${err}`);
     });
 }
 
 jenkins.job.list()
   .then((data) => {
     const jobNames = data.map(item => item.name).filter(item => item.indexOf('_OLD') === -1);
-    console.log('Monitoring jobs:', jobNames.join(', '));
+    log(`Monitoring jobs: ${jobNames.join(', ')}`);
     return Promise.all(jobNames.map(name => jenkins.job.get(name)));
   })
   .then((jobsData) => {
@@ -117,5 +162,5 @@ jenkins.job.list()
     currentJobs.forEach(job => jobCheck(job));
   })
   .catch((err) => {
-    console.log(`job.list ERR: ${err}`);
+    log(`job.list ERR: ${err}`);
   });
