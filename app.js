@@ -1,17 +1,18 @@
 /* eslint-disable no-console */
 const Jenkins = require('jenkins'),
   Promise = require('bluebird'),
-  config = require('./config/default.json'),
+  config = require('config'),
   jenkins = Jenkins(config.jenkins),
   SlackBot = require('slackbots'),
   moment = require('moment'),
+  bunyan = require('bunyan'),
+  log = bunyan.createLogger({name: 'Anna'}),
   bot = new SlackBot({token: config.slack.token, name: config.slack.name});
 
-let slackUsers = [];
+log.level(config.logger.level);
 
-function log(data) {
-  console.log(`${moment().format('MM-DD HH:mm:ss')}: ${data}`);
-}
+let slackUsers = [];
+let monitoringBuilds = 0;
 
 bot.on('start', () => {
   slackUsers = bot.getUsers()._value.members
@@ -21,7 +22,7 @@ bot.on('start', () => {
     .map((user) => {
       return {name: user.name, email: user.profile.email};
     });
-  // console.log(JSON.stringify(users, null, 3));
+  // console.log.info(JSON.stringify(users, null, 3));
 });
 
 function randomInt(low, high) {
@@ -72,25 +73,26 @@ function notifySlackUser(email, message, result) {
     icon_url: 'http://www.topnews.ru/upload/img/f66c6758c3.jpg',
   };
   bot.postMessageToUser(notifyUser.name, '', richMessage)
-    .then(() => log(`${email} notified`))
+    .then(() => log.debug(`${email} notified`))
     .catch((err) => {
-      log(`ERR notifySlackUser: ${err}`);
+      log.warn(`notifySlackUser: ${err}`);
     });
 }
 
 function monitorBuild(name, id) {
-  Promise.delay(randomInt(1000, 10000))
+  Promise.delay(randomInt(config.jenkins.monitoring.build.delay.min, config.jenkins.monitoring.build.delay.max))
     .then(() => {
       return jenkins.build.get(name, id);
     })
     .then((build) => {
-      // console.log(JSON.stringify(build, null, 3));
+      // console.log.info(JSON.stringify(build, null, 3));
       if (build.result === null) {
         setImmediate(() => {
           monitorBuild(name, id);
         });
         return;
       }
+      monitoringBuilds--;
       let userId = build.actions.find((action) => {
         return action.causes && action.causes[0] && action.causes[0].userId;
       });
@@ -104,7 +106,7 @@ function monitorBuild(name, id) {
           message += ` for ${build.displayName}`;
         }
         message += ` is ${build.result}: ${build.url}console\nDuration: ${build.duration / 1000} sec`;
-        log(`${userId}: ${message}`);
+        log.debug(`${userId}: ${message}`);
         notifySlackUser(userId, message, build.result);
       }
     })
@@ -113,22 +115,23 @@ function monitorBuild(name, id) {
         setImmediate(() => {
           monitorBuild(name, id);
         });
-        log(`monitorBuild WARN: ${err}`);
+        log.info(`monitorBuild WARN: ${err}`);
         return;
       }
-      log(`monitorBuild ERR: ${err}`);
+      log.error(`monitorBuild: ${err}`);
     });
 }
 
 function jobCheck(job) {
-  // console.log(`checking job ${JSON.stringify(job)}`);
-  Promise.delay(randomInt(100, 10000))
+  // console.log.info(`checking job ${JSON.stringify(job)}`);
+  Promise.delay(randomInt(config.jenkins.monitoring.job.delay.min, config.jenkins.monitoring.job.delay.max))
     .then(() => {
       return jenkins.job.get(job.name);
     })
     .then((jobData) => {
       if (jobData.lastBuild.number > job.last) {
         for (let i = job.last + 1; i <= jobData.lastBuild.number; i++) {
+          monitoringBuilds++;
           monitorBuild(job.name, i);
         }
         job.last = jobData.lastBuild.number;
@@ -142,17 +145,26 @@ function jobCheck(job) {
         setImmediate(() => {
           jobCheck(job);
         });
-        log(`jobCheck WARN: ${err}`);
+        log.warn(`jobCheck: ${err}`);
         return;
       }
-      log(`jobCheck ERR: ${err}`);
+      log.error(`jobCheck ERR: ${err}`);
+    });
+}
+
+function logMonitoring() {
+  Promise.delay(10000)
+    .then(() => {
+      log.debug(`Monitoring builds: ${monitoringBuilds}`);
+      setImmediate(logMonitoring);
     });
 }
 
 jenkins.job.list()
   .then((data) => {
     const jobNames = data.map(item => item.name).filter(item => item.indexOf('_OLD') === -1);
-    log(`Monitoring jobs: ${jobNames.join(', ')}`);
+    logMonitoring();
+    log.info(`Monitoring jobs: ${jobNames.join(', ')}`);
     return Promise.all(jobNames.map(name => jenkins.job.get(name)));
   })
   .then((jobsData) => {
@@ -162,5 +174,5 @@ jenkins.job.list()
     currentJobs.forEach(job => jobCheck(job));
   })
   .catch((err) => {
-    log(`job.list ERR: ${err}`);
+    log.error(`job.list: ${err}`);
   });

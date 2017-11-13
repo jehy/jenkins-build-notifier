@@ -1,0 +1,9 @@
+{
+  "jenkins": {
+    "baseUrl": "https://user@domain:token@host"
+  },
+  "slack": {
+    "token": "secret",
+    "name": "Vasya"
+  }
+}

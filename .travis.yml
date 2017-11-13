@@ -3,4 +3,4 @@ node_js:
   - "6"
   - "7"
 before_install:
- - cp config/default.dist.json config/default.json
+ - cp config/runtime.dist.json config/runtime.json

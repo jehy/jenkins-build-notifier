@@ -1,0 +1,25 @@
+{
+  "logger": {
+    "level": "INFO"
+  },
+  "jenkins": {
+    "crumbIssuer": true,
+    "promisify": true,
+    "monitoring": {
+      "job": {
+        "delay": {
+          "min": 1000,
+          "max": 10000
+        }
+      },
+      "build": {
+        "delay": {
+          "min": 1000,
+          "max": 10000
+        }
+      }
+    }
+  },
+  "slack": {
+  }
+}

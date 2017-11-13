@@ -1,11 +1,12 @@
 {
   "name": "jenkins-build-notifier",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "",
   "main": "index.js",
   "scripts": {
     "lint": "./node_modules/eslint/bin/eslint.js .",
-    "start": "node app.js",
+    "start-local": "node --use_strict app.js | ./node_modules/bunyan/bin/bunyan -o short",
+    "start": "node --use_strict app.js",
     "deploy": "npm install --production"
   },
   "author": "Jehy <npm@jehy.ru>",
@@ -16,6 +17,8 @@
   },
   "dependencies": {
     "bluebird": "^3.5.0",
+    "bunyan": "^1.8.12",
+    "config": "^1.28.1",
     "jenkins": "^0.20.0",
     "moment": "^2.19.2",
     "request": "^2.80.0",
@@ -23,10 +26,10 @@
     "slackbots": "^1.1.0"
   },
   "devDependencies": {
-    "eslint": "4.9.0",
+    "eslint": "4.11.0",
     "eslint-config-airbnb-base": "12.1.0",
     "eslint-loader": "1.9.0",
-    "eslint-plugin-import": "2.7.0",
+    "eslint-plugin-import": "2.8.0",
     "eslint-plugin-promise": "3.6.0",
     "eslint-plugin-standard": "3.0.1"
   }

@@ -4,17 +4,17 @@
 [![dependencies Status](https://david-dm.org/jehy/jenkins-build-notifier/status.svg)](https://david-dm.org/jehy/jenkins-build-notifier)
 [![devDependencies Status](https://david-dm.org/jehy/jenkins-build-notifier/dev-status.svg)](https://david-dm.org/jehy/jenkins-build-notifier?type=dev)
 
-Notifies users about their completed builds in jenkins.
+Notifies slack users about their completed builds in jenkins (user email should be same in slack and jenkins).
 
 
 ## Usage
-**config.json**
+
+### Setup
+**runtime.json**
 ```json
 {
   "jenkins": {
-    "baseUrl": "https://user@domain:token@host",
-    "crumbIssuer": true,
-    "promisify": true
+    "baseUrl": "https://user@domain:token@host"
   },
   "slack": {
     "token": "secret",
@@ -22,6 +22,13 @@ Notifies users about their completed builds in jenkins.
   }
 }
 ```
-## Config parameters
-* `jenkins` - data for connection to jenkins
-* `slack` - data for connection to slack
+### Run
+
+```bash
+npm start
+```
+or with cute colored logs:
+
+```bash
+npm run start-local
+```
