@@ -86,10 +86,12 @@ function notifySlackUser(email, message, result) {
 
 function monitorBuild(name, id) {
   Promise.delay(randomInt(config.jenkins.monitoring.build.delay.min, config.jenkins.monitoring.build.delay.max))
+    .timeout(10000)
     .then(() => {
       return jenkins.build.get(name, id);
     })
     .then((build) => {
+      log.debug(`checking build ${id} for ${name}`);
       // console.log.info(JSON.stringify(build, null, 3));
       if (build.result === null) {
         setImmediate(() => {
@@ -130,12 +132,15 @@ function monitorBuild(name, id) {
 function jobCheck(job) {
   // console.log.info(`checking job ${JSON.stringify(job)}`);
   Promise.delay(randomInt(config.jenkins.monitoring.job.delay.min, config.jenkins.monitoring.job.delay.max))
+    .timeout(10000)
     .then(() => {
       return jenkins.job.get(job.name);
     })
     .then((jobData) => {
+      log.trace(`checking job ${job.name}: build ${jobData.lastBuild.number} vs last ${job.last}`);
       if (jobData.lastBuild.number > job.last) {
         for (let i = job.last + 1; i <= jobData.lastBuild.number; i++) {
+          log.debug(`Adding build ${i} for ${job.name} to monitor`);
           monitoringBuilds++;
           monitorBuild(job.name, i);
         }
@@ -162,10 +167,11 @@ function logMonitoring() {
   setTimeout(logMonitoring, 10000);
 }
 
-jenkins.job.list()
+Promise.resolve().timeout(10000)
+  .then(() => jenkins.job.list())
   .then((data) => {
     const jobNames = data.map(item => item.name).filter(item => item.indexOf('_OLD') === -1);
-    logMonitoring();
+    setTimeout(logMonitoring, 10000);
     log.info(`Monitoring jobs: ${jobNames.join(', ')}`);
     return Promise.all(jobNames.map(name => jenkins.job.get(name)));
   })
