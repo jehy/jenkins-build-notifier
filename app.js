@@ -86,10 +86,8 @@ function notifySlackUser(email, message, result) {
 
 function monitorBuild(name, id) {
   Promise.delay(randomInt(config.jenkins.monitoring.build.delay.min, config.jenkins.monitoring.build.delay.max))
-    .timeout(10000)
-    .then(() => {
-      return jenkins.build.get(name, id);
-    })
+    .then(() => jenkins.build.get(name, id))
+    .timeout(20000)
     .then((build) => {
       log.debug(`checking build ${id} for ${name}`);
       // console.log.info(JSON.stringify(build, null, 3));
@@ -118,7 +116,7 @@ function monitorBuild(name, id) {
       }
     })
     .catch((err) => {
-      if (err.code === 'ETIMEDOUT') {
+      if (err.code === 'ETIMEDOUT' || err.name === 'TimeoutError') {
         setImmediate(() => {
           monitorBuild(name, id);
         });
@@ -132,10 +130,8 @@ function monitorBuild(name, id) {
 function jobCheck(job) {
   // console.log.info(`checking job ${JSON.stringify(job)}`);
   Promise.delay(randomInt(config.jenkins.monitoring.job.delay.min, config.jenkins.monitoring.job.delay.max))
-    .timeout(10000)
-    .then(() => {
-      return jenkins.job.get(job.name);
-    })
+    .then(() => jenkins.job.get(job.name))
+    .timeout(20000)
     .then((jobData) => {
       log.trace(`checking job ${job.name}: build ${jobData.lastBuild.number} vs last ${job.last}`);
       if (jobData.lastBuild.number > job.last) {
@@ -151,7 +147,7 @@ function jobCheck(job) {
       });
     })
     .catch((err) => {
-      if (err.code === 'ETIMEDOUT') {
+      if (err.code === 'ETIMEDOUT' || err.name === 'TimeoutError') {
         setImmediate(() => {
           jobCheck(job);
         });
@@ -167,8 +163,9 @@ function logMonitoring() {
   setTimeout(logMonitoring, 10000);
 }
 
-Promise.resolve().timeout(10000)
+Promise.resolve()
   .then(() => jenkins.job.list())
+  .timeout(20000)
   .then((data) => {
     const jobNames = data.map(item => item.name).filter(item => item.indexOf('_OLD') === -1);
     setTimeout(logMonitoring, 10000);
