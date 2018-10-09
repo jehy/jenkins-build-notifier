@@ -1,4 +1,11 @@
 {
+  "parserOptions": {
+    "ecmaVersion": 2018,
+    "sourceType": "script",
+    "ecmaFeatures": {
+      "jsx": false
+    }
+  },
   "env": {
     "browser": false,
     "node": true,
@@ -10,14 +17,15 @@
     "promise"
   ],
   "rules": {
+    "strict": [
+      "error",
+      "global"
+    ],
     "no-underscore-dangle":"off",
-    "prefer-destructuring":"off",
-    "one-var": "off",
+    "prefer-destructuring":"warn",
     "no-mixed-operators": "off",
     "arrow-body-style": "off",
     "brace-style": "off",
-    "indent": "off",
-    "padded-blocks": "off",
     "no-plusplus": "off",
     "arrow-spacing": "off",
     "object-curly-spacing": "off",
@@ -25,8 +33,6 @@
     "no-unused-vars": "warn",
     "object-shorthand": "warn",
     "no-param-reassign": "warn",
-    "no-console": "warn",
-    "no-multi-spaces": "off",
     "max-len": [
       "error",
       140

@@ -1,13 +1,15 @@
-/* eslint-disable no-console */
-const Jenkins = require('jenkins'),
-  Promise = require('bluebird'),
-  config = require('config'),
-  jenkins = Jenkins(config.jenkins),
-  SlackBot = require('slackbots'),
-  moment = require('moment'),
-  bunyan = require('bunyan'),
-  log = bunyan.createLogger({name: 'Anna'}),
-  bot = new SlackBot({token: config.slack.token, name: config.slack.name});
+'use strict';
+
+const Jenkins = require('jenkins');
+const Promise = require('bluebird');
+const config = require('config');
+const SlackBot = require('slackbots');
+const moment = require('moment');
+const bunyan = require('bunyan');
+
+const log = bunyan.createLogger({name: 'Anna'});
+const jenkins = Jenkins(config.jenkins);
+const bot = new SlackBot({token: config.slack.token, name: config.slack.name});
 
 log.level(config.logger.level);
 
@@ -34,12 +36,12 @@ function randomInt(low, high) {
   return Math.floor(Math.random() * (high - low) + low);
 }
 
-function notifySlackUser(email, message, result) {
+async function notifySlackUser(email, message, result) {
   const notifyUser = slackUsers.find((user) => {
     return user.email === email;
   });
   if (!notifyUser) {
-    return;
+    return false;
   }
   let color = '#439FE0';
   if (result === 'SUCCESS') {
@@ -77,85 +79,88 @@ function notifySlackUser(email, message, result) {
     as_user: false,
     icon_url: 'http://www.topnews.ru/upload/img/f66c6758c3.jpg',
   };
-  bot.postMessageToUser(notifyUser.name, '', richMessage)
+  return bot.postMessageToUser(notifyUser.name, '', richMessage)
     .then(() => log.debug(`${email} notified`))
     .catch((err) => {
       log.warn(`notifySlackUser: ${err}`);
     });
 }
 
-function monitorBuild(name, id) {
-  Promise.delay(randomInt(config.jenkins.monitoring.build.delay.min, config.jenkins.monitoring.build.delay.max))
-    .then(() => jenkins.build.get(name, id))
-    .timeout(20000)
-    .then((build) => {
-      log.debug(`checking build ${id} for ${name}`);
-      // console.log.info(JSON.stringify(build, null, 3));
-      if (build.result === null) {
-        setImmediate(() => {
-          monitorBuild(name, id);
-        });
-        return;
-      }
-      monitoringBuilds--;
-      let userId = build.actions.find((action) => {
-        return action.causes && action.causes[0] && action.causes[0].userId;
+async function monitorBuild(name, id) {
+  await Promise.delay(randomInt(config.jenkins.monitoring.build.delay.min, config.jenkins.monitoring.build.delay.max));
+  try {
+    const build = await Promise.resolve(jenkins.build.get(name, id)).timeout(20000);
+    log.debug(`checking build ${id} for ${name}`);
+    // console.log.info(JSON.stringify(build, null, 3));
+    if (build.result === null) {
+      setImmediate(() => {
+        monitorBuild(name, id);
       });
-      if (userId) {
-        userId = userId.causes[0].userId;
-        let message = `Build result for ${name} ${id}`;
-        if (build.timestamp) {
-          message += ` started on ${moment(build.timestamp).format('MM-DD HH:mm:ss')}`;
-        }
-        if (build.displayName) {
-          message += ` for ${build.displayName}`;
-        }
-        message += ` is ${build.result}: ${build.url}console\nDuration: ${build.duration / 1000} sec`;
-        log.debug(`${userId}: ${message}`);
-        notifySlackUser(userId, message, build.result);
-      }
-    })
-    .catch((err) => {
-      if (err.code === 'ETIMEDOUT' || err.name === 'TimeoutError') {
-        setImmediate(() => {
-          monitorBuild(name, id);
-        });
-        log.info(`monitorBuild WARN: ${err}`);
-        return;
-      }
-      log.error(`monitorBuild: ${err}`);
+      return;
+    }
+    monitoringBuilds--;
+    let userId = build.actions.find((action) => {
+      return action.causes && action.causes[0] && action.causes[0].userId;
     });
+    if (userId) {
+      userId = userId.causes[0].userId;
+      let message = `Build result for ${name} ${id}`;
+      if (build.timestamp) {
+        message += ` started on ${moment(build.timestamp)
+          .format('MM-DD HH:mm:ss')}`;
+      }
+      if (build.displayName) {
+        message += ` for ${build.displayName}`;
+      }
+      message += ` is ${build.result}: ${build.url}console\nDuration: ${build.duration / 1000} sec`;
+      log.debug(`${userId}: ${message}`);
+      notifySlackUser(userId, message, build.result);
+    }
+  }
+  catch (err) {
+    if (err.code === 'ETIMEDOUT' || err.name === 'TimeoutError') {
+      setImmediate(() => {
+        monitorBuild(name, id);
+      });
+      log.info(`monitorBuild WARN: ${err}`);
+      return;
+    }
+    log.error(`monitorBuild: ${err}`);
+  }
 }
 
-function jobCheck(job) {
+async function jobCheck(job) {
   // console.log.info(`checking job ${JSON.stringify(job)}`);
-  Promise.delay(randomInt(config.jenkins.monitoring.job.delay.min, config.jenkins.monitoring.job.delay.max))
-    .then(() => jenkins.job.get(job.name))
-    .timeout(20000)
-    .then((jobData) => {
-      log.trace(`checking job ${job.name}: build ${jobData.lastBuild.number} vs last ${job.last}`);
-      if (jobData.lastBuild.number > job.last) {
-        for (let i = job.last + 1; i <= jobData.lastBuild.number; i++) {
-          log.debug(`Adding build ${i} for ${job.name} to monitor`);
-          monitoringBuilds++;
-          monitorBuild(job.name, i);
-        }
-        job.last = jobData.lastBuild.number;
+  await Promise.delay(randomInt(config.jenkins.monitoring.job.delay.min, config.jenkins.monitoring.job.delay.max));
+  try {
+    const jobData = await Promise.resolve(jenkins.job.get(job.name)).timeout(20000);
+    if (!jobData.lastBuild)
+    {
+      log.trace(`checking job ${job.name}: no build data, skiping`);
+      return;
+    }
+    log.trace(`checking job ${job.name}: build ${jobData.lastBuild.number} vs last ${job.last}`);
+    if (jobData.lastBuild.number > job.last) {
+      for (let i = job.last + 1; i <= jobData.lastBuild.number; i++) {
+        log.debug(`Adding build ${i} for ${job.name} to monitor`);
+        monitoringBuilds++;
+        monitorBuild(job.name, i);
       }
+      job.last = jobData.lastBuild.number;
+    }
+    setImmediate(() => {
+      jobCheck(job);
+    });
+  } catch (err) {
+    if (err.code === 'ETIMEDOUT' || err.name === 'TimeoutError') {
       setImmediate(() => {
         jobCheck(job);
       });
-    })
-    .catch((err) => {
-      if (err.code === 'ETIMEDOUT' || err.name === 'TimeoutError') {
-        setImmediate(() => {
-          jobCheck(job);
-        });
-        log.warn(`jobCheck: ${err}`);
-        return;
-      }
-      log.error(`jobCheck ERR: ${err}`);
-    });
+      log.warn(`jobCheck: ${err}`);
+      return;
+    }
+    log.error(`jobCheck ERR: ${err}`);
+  }
 }
 
 function logMonitoring() {
@@ -163,21 +168,26 @@ function logMonitoring() {
   setTimeout(logMonitoring, 10000);
 }
 
-Promise.resolve()
-  .then(() => jenkins.job.list())
-  .timeout(20000)
-  .then((data) => {
-    const jobNames = data.map(item => item.name).filter(item => item.indexOf('_OLD') === -1);
+async function run() {
+  try {
+    const data = await Promise.resolve(jenkins.job.list()).timeout(20000);
+    const jobNames = data.map(item => item.name)
+      .filter(item => item.indexOf('_OLD') === -1);
     setTimeout(logMonitoring, 10000);
     log.info(`Monitoring jobs: ${jobNames.join(', ')}`);
-    return Promise.all(jobNames.map(name => jenkins.job.get(name)));
-  })
-  .then((jobsData) => {
+    const jobsData = await Promise.map(jobNames, name => jenkins.job.get(name), {concurrency: 3});
     const currentJobs = jobsData.map((jobData) => {
-      return {name: jobData.name, last: jobData.lastBuild.number, description: jobData.description};
+      return {
+        name: jobData.name,
+        last: jobData.lastBuild && jobData.lastBuild.number,
+        description: jobData.description,
+      };
     });
     currentJobs.forEach(job => jobCheck(job));
-  })
-  .catch((err) => {
+  }
+  catch (err) {
     log.error(`job.list: ${err}`);
-  });
+  }
+}
+
+run();
